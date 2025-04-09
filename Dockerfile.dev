@@ -1,0 +1,33 @@
+FROM golang:1.24-alpine AS build-demo-grpc
+
+ARG BIN_DIR=bin
+ARG BINARY_NAME=demo-grpc
+ARG BUILD_VERSION="Unknown"
+ARG BUILD_TIME="Unknown"
+ENV CGO_ENABLED=1
+ARG TARGETOS TARGETARCH
+
+RUN apk update \
+    && apk add --no-cache git gcc g++ musl-dev
+
+WORKDIR /app
+COPY . ./
+RUN mkdir -p -m 0600 ~/.ssh
+RUN touch ~/.ssh/known_hosts
+ARG LD_FLAGS="-s -w -X 'main.buildVersion=${BUILD_VERSION}' -X 'main.buildTime=${BUILD_TIME}'"
+RUN --mount=type=ssh go mod tidy
+RUN	GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "${LD_FLAGS}" -trimpath -o /${BINARY_NAME} main.go
+
+FROM alpine:3 AS build-release
+
+ENV CGO_ENABLED=1
+ARG TARGETOS TARGETARCH
+USER root
+RUN apk update
+ARG BINARY_NAME=demo-grpc
+RUN mkdir -p /var/demo-grpc
+RUN mkdir -p /opt/demo-grpc
+WORKDIR /opt/demo-grpc
+RUN mkdir bin
+COPY --from=build-demo-grpc /${BINARY_NAME} ./bin/${BINARY_NAME}
+ENTRYPOINT ["/opt/demo-grpc/bin/demo-grpc"]
