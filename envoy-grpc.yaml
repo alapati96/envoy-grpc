@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: grpc-filter
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: INSERT_FIRST
+        value:
+          name: envoy.filters.http.ext_authz
+          typed_config:
+            '@type': type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+            transport_api_version: V3
+            failure_mode_allow: false
+            grpc_service:
+              envoy_grpc:
+                cluster_name: envoy-grpc
+
+    - applyTo: CLUSTER
+      patch:
+        operation: ADD
+        value:
+          name: envoy-grpc
+          type: STRICT_DNS
+          connect_timeout: 5s
+          http2_protocol_options: {}
+          load_assignment:
+            cluster_name: envoy-grpc
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: demo-grpc.demo.svc.cluster.local
+                          port_value: 9000
+
